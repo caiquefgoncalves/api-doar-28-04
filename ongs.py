@@ -282,16 +282,24 @@ def bloquear_ong(id_usuarios):
     if erro: return erro
 
     acao = request.json.get('acao', 'bloquear')
+    motivo = request.json.get('motivo', '')
+
     con = conexao()
     cur = con.cursor()
     try:
-        cur.execute("SELECT ID_USUARIOS, NOME FROM USUARIOS WHERE ID_USUARIOS = ? AND TIPO = 2", (id_usuarios,))
+        cur.execute("SELECT ID_USUARIOS, NOME, EMAIL FROM USUARIOS WHERE ID_USUARIOS = ? AND TIPO = 2", (id_usuarios,))
         ong = cur.fetchone()
         if not ong: return jsonify({'error': 'ONG não encontrada'}), 404
 
         novo_status = 0 if acao == 'bloquear' else 1
         cur.execute("UPDATE USUARIOS SET ATIVO = ? WHERE ID_USUARIOS = ?", (novo_status, id_usuarios))
         con.commit()
+
+
+        if acao == 'bloquear' and motivo:
+            html = render_template('template_bloqueio.html', nome=ong[1], motivo=motivo)
+            threading.Thread(target=enviando_email, args=(ong[2], 'Sua ONG foi bloqueada - Doar +', html)).start()
+
         return jsonify({'message': f'ONG {ong[1]} {"bloqueada" if acao == "bloquear" else "desbloqueada"}!'}), 200
     except Exception as e:
         con.rollback()
