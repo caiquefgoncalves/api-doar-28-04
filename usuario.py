@@ -119,158 +119,220 @@ def criar_usuarios():
 
 @app.route('/editar_usuarios/<int:id_usuarios>', methods=['PUT'])
 def editar_usuarios(id_usuarios):
-    con = None
-    cur = None
+    # Cria a conexão com o banco
+    con = conexao()
+
+    # Abre o cursor
+    cur = con.cursor()
+
+    token = request.form.get('token', None)
 
     try:
-        con = conexao()
-        cur = con.cursor()
-
-        # Pega o token do FormData
-        token = request.form.get('token', None)
-        if token is None:
+        # Verifica se o token existe
+        if token == None:
             return jsonify({'error': 'Token necessário'}), 401
 
-        # Verifica se o token é válido
-        from funcao import decodificar_token
-        import jwt
-        from flask import current_app
+        # Verifica se o usuário é o dono da conta ou administrador
+        # if decodificar_token()['id_usuarios'] != id_usuarios and decodificar_token()['tipo'] != 0:
+        #     return jsonify({'error': 'Token necessário'}), 401
 
-        try:
-            payload = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
-            token_tipo = payload['tipo']
-            token_id = payload['id_usuarios']
-        except jwt.ExpiredSignatureError:
-            return jsonify({'error': 'Token expirado. Faça login novamente.'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'error': 'Token inválido.'}), 401
+        # Busca os dados atuais do usuário
+        cur.execute("""SELECT ID_USUARIOS,
+                              NOME,
+                              EMAIL,
+                              SENHA,
+                              CPF_CNPJ,
+                              TELEFONE,
+                              DESCRICAO_BREVE,
+                              DESCRICAO_LONGA,
+                              APROVACAO,
+                              COD_BANCO,
+                              NUM_AGENCIA,
+                              NUM_CONTA,
+                              TIPO_CONTA,
+                              CHAVE_PIX,
+                              CATEGORIA,
+                              ATIVO,
+                              LOCALIZACAO,
+                              TIPO,
+                              DATA_CADASTRO,
+                              EMAIL_CONFIRMACAO,
+                              CODIGO_CONFIRMACAO,
+                              TENTATIVA
+                       FROM USUARIOS
+                       WHERE ID_USUARIOS = ?""", (id_usuarios,))
 
-        # Apenas ADM (tipo 0) ou o próprio usuário pode editar
-        if token_tipo != 0 and token_id != id_usuarios:
-            return jsonify({'error': 'Você não tem permissão para editar este usuário'}), 403
-
-        # Busca dados atuais do usuário
-        cur.execute("""
-            SELECT NOME, EMAIL, SENHA, CPF_CNPJ, TELEFONE,
-                   DESCRICAO_BREVE, DESCRICAO_LONGA, APROVACAO,
-                   COD_BANCO, NUM_AGENCIA, NUM_CONTA, TIPO_CONTA,
-                   CHAVE_PIX, CATEGORIA, ATIVO, LOCALIZACAO, TIPO,
-                   DATA_CADASTRO, EMAIL_CONFIRMACAO, CODIGO_CONFIRMACAO, TENTATIVA
-            FROM USUARIOS
-            WHERE ID_USUARIOS = ?
-        """, (id_usuarios,))
-
+        # Armazena o resultado
         tem_usuario = cur.fetchone()
-        if tem_usuario is None:
+
+        # Verifica se o usuário existe
+        if tem_usuario == None:
             return jsonify({"error": "Usuário não encontrado"}), 404
 
-        # Pega os dados do formulário ou mantém os atuais
-        nome = request.form.get('nome', tem_usuario[0])
-        email = request.form.get('email', tem_usuario[1])
-        cpf_cnpj = request.form.get('cpf_cnpj', tem_usuario[3])
-        telefone = request.form.get('telefone', tem_usuario[4])
-        descricao_breve = request.form.get('descricao_breve', tem_usuario[5])
-        descricao_longa = request.form.get('descricao_longa', tem_usuario[6])
-        cod_banco = request.form.get('cod_banco', tem_usuario[8])
-        num_agencia = request.form.get('num_agencia', tem_usuario[9])
-        num_conta = request.form.get('num_conta', tem_usuario[10])
-        tipo_conta = request.form.get('tipo_conta', tem_usuario[11])
-        chave_pix = request.form.get('chave_pix', tem_usuario[12])
-        categoria = request.form.get('categoria', tem_usuario[13])
-        localizacao = request.form.get('localizacao', tem_usuario[15])
+        # Pega os dados enviados ou mantém os atuais
+        nome = request.form.get('nome', tem_usuario[1])
+        email = request.form.get('email', tem_usuario[2])
+        cpf_cnpj = request.form.get('cpf_cnpj', tem_usuario[4])
+        telefone = request.form.get('telefone', tem_usuario[5])
+        descricao_breve = request.form.get('descricao_breve', tem_usuario[6])
+        descricao_longa = request.form.get('descricao_longa', tem_usuario[7])
+        aprovacao = tem_usuario[8]
+        cod_banco = request.form.get('cod_banco', tem_usuario[9])
+        num_agencia = request.form.get('num_agencia', tem_usuario[10])
+        num_conta = request.form.get('num_conta', tem_usuario[11])
+        tipo_conta = request.form.get('tipo_conta', tem_usuario[12])
+        chave_pix = request.form.get('chave_pix', tem_usuario[13])
+        categoria = request.form.get('categoria', tem_usuario[14])
+        ativo = tem_usuario[15]
+        localizacao = request.form.get('localizacao', tem_usuario[16])
         senha = request.form.get('senha', None)
         confirmar_senha = request.form.get('confirmar_senha', None)
         foto_perfil = request.files.get('foto_perfil')
+        tipo = tem_usuario[17]
+        data_cadastro = tem_usuario[18]
+        email_confirmacao = tem_usuario[19]
+        codigo_confirmacao = tem_usuario[20]
+        tentativa = tem_usuario[21]
 
-        # Validações básicas
-        if not nome or nome.strip() == '':
-            return jsonify({"error": "Nome é obrigatório"}), 400
+        # Verifica se o nome está vazio
+        nome_sem_espacos = nome.strip()
+        if nome_sem_espacos == '':
+            return jsonify({"error": "Nome é uma informação obrigatória."}), 400
 
-        if not email or email.strip() == '':
-            return jsonify({"error": "Email é obrigatório"}), 400
+        # Verifica se o CPF/CNPJ está vazio
+        cpf_cnpj_sem_espacos = cpf_cnpj.strip()
+        if cpf_cnpj_sem_espacos == '':
+            return jsonify({"error": "CPF/CNPJ é uma informação obrigatória."}), 400
 
-        # Verifica duplicidade de CPF/CNPJ (se foi alterado)
-        if cpf_cnpj != tem_usuario[3]:
-            cur.execute("SELECT ID_USUARIOS FROM USUARIOS WHERE CPF_CNPJ = ? AND ID_USUARIOS != ?",
-                        (cpf_cnpj, id_usuarios))
-            if cur.fetchone():
-                return jsonify({"error": "CPF/CNPJ já cadastrado"}), 400
+        # Verifica se o email está vazio
+        email_sem_espacos = email.strip()
+        if email_sem_espacos == '':
+            return jsonify({"error": "E-mail é uma informação obrigatória."}), 400
 
-        # Verifica duplicidade de email (se foi alterado)
-        if email != tem_usuario[1]:
-            cur.execute("SELECT ID_USUARIOS FROM USUARIOS WHERE EMAIL = ? AND ID_USUARIOS != ?", (email, id_usuarios))
-            if cur.fetchone():
-                return jsonify({"error": "E-mail já cadastrado"}), 400
+        # Verifica se CPF/CNPJ já existe (exceto o próprio usuário)
+        if verificar_existente(cpf_cnpj, 1, id_usuarios) == False:
+            return jsonify({"error": "CPF ou CNPJ já cadastrado."}), 400
 
-        # Trata senha (opcional)
-        nova_senha_hash = tem_usuario[2]
-        if senha:
-            if senha != confirmar_senha:
-                return jsonify({"error": "Senhas não correspondem"}), 400
+        # Verifica se email já existe (exceto o próprio usuário)
+        if verificar_existente(email, 2, id_usuarios) == False:
+            return jsonify({"error": "E-mail já cadastrado"}, 400)
 
-            from flask_bcrypt import generate_password_hash
+        # Verifica se foi enviada uma nova senha
+        if senha != None:
+            # Valida a força da senha
+            if senha_forte(senha) == False:
+                return jsonify({
+                               "error": "Senha fraca. A senha deve conter pelo menos 8 caracteres, incluindo letras maiúsculas, minúsculas, números e caracteres especiais."}), 400
+
+            # Verifica se as senhas correspondem
+            if senha_correspondente(senha, confirmar_senha) == False:
+                return jsonify({"error": "Senhas não correspondem."}), 400
+
+            # Verifica se não é uma senha antiga
+            if senha_antiga(id_usuarios, senha) == False:
+                return jsonify({"error": "A senha nova não pode ser igual às últimas 3 utilizadas"}), 400
+
+            # Criptografa a nova senha
             nova_senha_hash = generate_password_hash(senha).decode('utf-8')
+        else:
+            # Mantém a senha antiga
+            nova_senha_hash = tem_usuario[3]
 
-        # Atualiza no banco
-        cur.execute("""
-            UPDATE USUARIOS
-            SET NOME = ?,
-                EMAIL = ?,
-                SENHA = ?,
-                CPF_CNPJ = ?,
-                TELEFONE = ?,
-                DESCRICAO_BREVE = ?,
-                DESCRICAO_LONGA = ?,
-                COD_BANCO = ?,
-                NUM_AGENCIA = ?,
-                NUM_CONTA = ?,
-                TIPO_CONTA = ?,
-                CHAVE_PIX = ?,
-                CATEGORIA = ?,
-                LOCALIZACAO = ?
-            WHERE ID_USUARIOS = ?
-        """, (
-            nome, email, nova_senha_hash, cpf_cnpj, telefone,
-            descricao_breve, descricao_longa, cod_banco, num_agencia,
-            num_conta, tipo_conta, chave_pix, categoria, localizacao,
-            id_usuarios
-        ))
+        # Se o email foi alterado, gera novo código de confirmação
+        if email != tem_usuario[2]:
+            codigo_confirmacao = randint(100000, 999999)
+            email_confirmacao = 0
 
+            # Define dados do e-mail
+            assunto = 'Código de Confirmação de E-mail'
+            mensagem = 'Percebemos que você alterou seu e-mail, por isso é necessário o confirmar novamente'
+            codigo = codigo_confirmacao
+
+            # Renderiza HTML do e-mail
+            html = render_template('template_email.html', mensagem=mensagem, codigo=codigo)
+
+            # Envia e-mail em thread separada
+            threading.Thread(target=enviando_email,
+                             args=(email, assunto, html)
+                             ).start()
+
+        # Atualiza os dados do usuário no banco
+        cur.execute("""UPDATE USUARIOS
+                       SET NOME               = ?,
+                           EMAIL              = ?,
+                           SENHA = ?,
+                           CPF_CNPJ           = ?,
+                           TELEFONE           = ?,
+                           DESCRICAO_BREVE    = ?,
+                           DESCRICAO_LONGA    = ?,
+                           APROVACAO          = ?,
+                           COD_BANCO          = ?,
+                           NUM_AGENCIA        = ?,
+                           NUM_CONTA          = ?,
+                           TIPO_CONTA         = ?,
+                           CHAVE_PIX          = ?,
+                           CATEGORIA          = ?,
+                           ATIVO             = ?,
+                           LOCALIZACAO        = ?,
+                           TIPO               = ?,
+                           DATA_CADASTRO      = ?,
+                           EMAIL_CONFIRMACAO  = ?,
+                           CODIGO_CONFIRMACAO = ?,
+                           TENTATIVA          = ?
+                       WHERE ID_USUARIOS = ?""", (nome, email, nova_senha_hash, cpf_cnpj, telefone, descricao_breve,
+                                                  descricao_longa, aprovacao, cod_banco, num_agencia, num_conta,
+                                                  tipo_conta,
+                                                  chave_pix, categoria, ativo, localizacao, tipo, data_cadastro,
+                                                  email_confirmacao,
+                                                  codigo_confirmacao, tentativa, id_usuarios))
+
+        # Confirma a alteração no banco
         con.commit()
 
-        # Salva foto de perfil se enviada
+        # Inicializa o caminho da imagem
+        caminho_imagem_destino = None
+
+        # Verifica se foi enviada uma nova foto
         if foto_perfil:
-            try:
-                nome_imagem = f'{id_usuarios}.jpeg'
-                caminho_pasta = os.path.join(app.config['UPLOAD_FOLDER'], 'Usuarios')
-                os.makedirs(caminho_pasta, exist_ok=True)
-                caminho_imagem = os.path.join(caminho_pasta, nome_imagem)
-                foto_perfil.save(caminho_imagem)
-                print(f"DEBUG - Foto atualizada: {caminho_imagem}")
-            except Exception as e:
-                print(f"ERRO ao salvar foto: {e}")
+            # Define nome da imagem
+            nome_imagem = f'{id_usuarios}.jpeg'
 
-        return jsonify({'message': 'Editado com sucesso!'}), 200
+            # Define diretório
+            caminho_imagem_destino = os.path.join(app.config['UPLOAD_FOLDER'], "Usuários")
 
+            # Cria diretório se não existir
+            os.makedirs(caminho_imagem_destino, exist_ok=True)
+
+            # Define caminho completo
+            caminho_imagem = os.path.join(caminho_imagem_destino, nome_imagem)
+
+            # Salva imagem
+            foto_perfil.save(caminho_imagem)
+
+        # Retorna sucesso
+        return jsonify({'message': "Usuário editado com sucesso",
+                        'usuario': {
+                            'tipo': tipo,
+                            'nome': nome,
+                            'email': email,
+                            'cpf_cnpj': cpf_cnpj,
+                            'telefone': telefone,
+                            'descricao_breve': descricao_breve,
+                            'descricao_longa': descricao_longa,
+                            'cod_banco': cod_banco,
+                            'num_agencia': num_agencia,
+                            'num_conta': num_conta,
+                            'tipo_conta': tipo_conta,
+                            'chave_pix': chave_pix,
+                            'categoria': categoria,
+                            'localizacao': localizacao
+                        }
+                        }), 201
     except Exception as e:
-        print(f"ERRO editar_usuarios: {e}")
-        if con:
-            try:
-                con.rollback()
-            except:
-                pass
-        return jsonify({'message': f'Erro ao editar: {str(e)}'}), 500
+        return jsonify({'message': f'Erro ao consultar o banco de dados: {e}'}), 500
     finally:
-        if cur:
-            try:
-                cur.close()
-            except:
-                pass
-        if con:
-            try:
-                con.close()
-            except:
-                pass
+        cur.close()
+        con.close()
 
 
 # Excluir usuário
