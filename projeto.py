@@ -246,16 +246,22 @@ def ver_projeto_publico(id_projetos):
                        FROM USUARIOS WHERE ID_USUARIOS = ?""", (p[1],))
         ong = cur.fetchone()
 
+        # Formatar CNPJ
+        cnpj_formatado = None
+        if ong and ong[3]:
+            cnpj = ong[3]
+            if len(cnpj) == 14:
+                cnpj_formatado = f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}"
+            elif len(cnpj) == 11:
+                cnpj_formatado = f"{cnpj[:3]}.{cnpj[3:6]}.{cnpj[6:9]}-{cnpj[9:]}"
+            else:
+                cnpj_formatado = cnpj
+
         # Busca atualizações
         cur.execute("""SELECT ID_ATUALIZACOES, TITULO, TEXTO, DATA_CRIACAO
                        FROM ATUALIZACOES WHERE ID_PROJETOS = ? 
                        ORDER BY DATA_CRIACAO DESC""", (id_projetos,))
         atts = cur.fetchall()
-
-        # Busca outros projetos da ONG
-        cur.execute("""SELECT ID_PROJETOS, TITULO, DESCRICAO, TIPO_AJUDA
-                       FROM PROJETOS WHERE ID_USUARIOS = ? AND ID_PROJETOS != ?""", (p[1], id_projetos))
-        outros = cur.fetchall()
 
         return jsonify({
             'projeto': {
@@ -264,17 +270,17 @@ def ver_projeto_publico(id_projetos):
             },
             'ong': {
                 'id': ong[0], 'nome': ong[1], 'descricao_breve': ong[2],
-                'cpf_cnpj': ong[3], 'cod_banco': ong[4], 'num_agencia': ong[5],
+                'cpf_cnpj': cnpj_formatado, 'cod_banco': ong[4], 'num_agencia': ong[5],
                 'localizacao': ong[6]
             } if ong else None,
             'qtd_atualizacoes': len(atts),
             'atualizacoes': [{
-                'id': a[0], 'titulo': a[1], 'texto': a[2],
-                'data': a[3].strftime('%d/%m/%Y %H:%M') if a[3] else ''
-            } for a in atts] if atts else [],
-            'projetos_ong': [{
-                'id': o[0], 'titulo': o[1], 'descricao': o[2], 'tipo_ajuda': o[3]
-            } for o in outros] if outros else []
+                'id': a[0],
+                'titulo': str(a[1]) if a[1] else '',
+                'texto': str(a[2]) if a[2] else '',
+                'data': a[3].strftime('%d/%m/%Y %H:%M') if a[3] else '',
+                'foto': f'{a[0]}.jpeg'
+            } for a in atts] if atts else []
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

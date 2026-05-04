@@ -72,7 +72,7 @@ def criar_usuarios():
             return jsonify({"error": "Senhas não correspondem"}), 400
 
         senha_cripto = generate_password_hash(senha).decode('utf-8')
-        codigo_confirmacao = randint(100000, 999999)
+        codigo_confirmacao = str(randint(100000, 999999))
         tentativa = 0
 
         cur.execute("""INSERT INTO USUARIOS (NOME, EMAIL, SENHA, CPF_CNPJ, TELEFONE,
@@ -502,7 +502,7 @@ def login():
 
             token = gerar_token(tipo, id_usuarios, 10)
             resp = make_response(jsonify({'message': f'Bem-vindo {nome}!', 'nome': nome, 'token': token}))
-            resp.set_cookie('acess_token', token, httponly=True, secure=False, samesite='Lax', path="/", max_age=3600)
+            resp.set_cookie('acess_token', token, httponly=True, secure=False, samesite='Lax', path="/", max_age=7600)
             return resp
 
         if tipo != 0:
