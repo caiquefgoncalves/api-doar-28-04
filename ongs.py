@@ -73,6 +73,33 @@ def ver_ong_publica(id_ong):
         cur.execute("""SELECT ID_PROJETOS, TITULO, DESCRICAO, TIPO_AJUDA
         FROM PROJETOS WHERE ID_USUARIOS = ? AND STATUS = 'Ativo'""", (id_ong,))
         projetos = cur.fetchall()
+        print(projetos)
+
+        if projetos:
+            qtd_projetos = len(projetos)
+            print(qtd_projetos)
+
+            ids_projetos = []
+
+            for p in projetos:
+                ids_projetos.append(p[0])
+
+            dic_atualizacoes = []
+            for id in ids_projetos:
+                cur.execute("""SELECT ID_ATUALIZACOES, ID_PROJETOS, TITULO, TEXTO
+                    FROM ATUALIZACOES WHERE ID_PROJETOS = ?""", (id,))
+                atualizacao = cur.fetchall()
+
+                for a in atualizacao:
+                    dic = {
+                        'id': a[0],
+                        'projetos': a[1],
+                        'titulo': a[2],
+                        'texto': a[3]
+                    }
+                    dic_atualizacoes.append(dic)
+            qtd_atualizacoes = len(dic_atualizacoes)
+
 
         return jsonify({
         'ong': {
@@ -81,9 +108,12 @@ def ver_ong_publica(id_ong):
         'localizacao': ong[6], 'cod_banco': ong[7], 'num_agencia': ong[8],
         'foto': f'{ong[0]}.jpeg'
             },
+        'qtd_projetos': qtd_projetos,
         'projetos': [{
         'id': p[0], 'titulo': p[1], 'descricao': p[2], 'tipo_ajuda': p[3]
-        } for p in projetos] if projetos else []
+        } for p in projetos] if projetos else [],
+        'qtd_atualizacoes': qtd_atualizacoes,
+        'atualizacoes': dic_atualizacoes
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
