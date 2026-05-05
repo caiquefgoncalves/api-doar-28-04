@@ -19,11 +19,14 @@ CORS(app,
 def handle_options():
     if request.method == 'OPTIONS':
         response = make_response()
-        origin = request.headers.get('Origin', '')
+        origin = request.headers.get('Origin', '*')
         allowed_origins = [
             "http://localhost:5173",
             "http://127.0.0.1:5173",
-            "http://192.168.0.135:5173"
+            "http://192.168.0.135:5173",
+            "http://10.92.3.137:5173",
+            "http://10.92.3.137:5000",
+            "*"
         ]
         if origin in allowed_origins:
             response.headers['Access-Control-Allow-Origin'] = origin

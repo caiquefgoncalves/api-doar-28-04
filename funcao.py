@@ -240,3 +240,12 @@ def decodificar_token():
         return False
     except Exception:
         return False
+
+
+def validar_adm():
+    token_data = decodificar_token()
+    if token_data == False:
+        return jsonify({'error': 'Token necessário. Faça login.'}), 401
+    if token_data['tipo'] != 0:
+        return jsonify({'error': 'Apenas administradores podem acessar esta rota'}), 403
+    return None

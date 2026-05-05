@@ -1,19 +1,13 @@
 # ongs.py
 from flask import jsonify, request, render_template
-from funcao import enviando_email, decodificar_token
+from funcao import enviando_email, decodificar_token, validar_adm
 from main import app
 from db import conexao
 import threading
 import datetime
 
 
-def validar_adm():
-    token_data = decodificar_token()
-    if token_data == False:
-        return jsonify({'error': 'Token necessário. Faça login.'}), 401
-    if token_data['tipo'] != 0:
-        return jsonify({'error': 'Apenas administradores podem acessar esta rota'}), 403
-    return None
+
 
 
 # ============================================
@@ -473,6 +467,201 @@ def buscar_ong_logada(id_ong):
             'num_conta': ong[10], 'tipo_conta': ong[11], 'chave_pix': ong[12],
             'categoria': ong[13], 'ativo': bool(ong[14]), 'localizacao': ong[15]
         }}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        con.close()
+
+
+# ============================================
+# ROTAS DE SEGUIR/ DESSEGUIR ONGS
+# ============================================
+
+@app.route('/seguir/<int:id_ong>', methods=['POST'])
+def seguir_ong(id_ong):
+    """Doador segue uma ONG"""
+    con = conexao()
+    cur = con.cursor()
+
+    try:
+        # Verifica token
+        token_data = decodificar_token()
+        if token_data == False:
+            return jsonify({'error': 'Você precisa estar logado para seguir uma ONG'}), 401
+
+        # Verifica se é doador (tipo 1)
+        if token_data['tipo'] != 1:
+            return jsonify({'error': 'Apenas doadores podem seguir ONGs'}), 403
+
+        id_doador = token_data['id_usuarios']
+
+        # Verifica se a ONG existe e está aprovada e ativa
+        cur.execute("""
+            SELECT ID_USUARIOS, NOME FROM USUARIOS 
+            WHERE ID_USUARIOS = ? AND TIPO = 2 AND APROVACAO = 1 AND ATIVO = 1
+        """, (id_ong,))
+        ong = cur.fetchone()
+
+        if not ong:
+            return jsonify({'error': 'ONG não encontrada ou não está disponível'}), 404
+
+        # Verifica se já está seguindo
+        cur.execute("""
+            SELECT ID_SEGUINDO, STATUS FROM SEGUINDO 
+            WHERE ID_USUARIOS_DOADOR = ? AND ID_USUARIOS_ONG = ?
+        """, (id_doador, id_ong))
+        seguindo = cur.fetchone()
+
+        if seguindo:
+            if seguindo[1] == 1:
+                return jsonify({'message': 'Você já está seguindo esta ONG', 'seguindo': True}), 200
+            else:
+                # Reativar follow
+                cur.execute("""
+                    UPDATE SEGUINDO SET STATUS = 1 
+                    WHERE ID_USUARIOS_DOADOR = ? AND ID_USUARIOS_ONG = ?
+                """, (id_doador, id_ong))
+                con.commit()
+                return jsonify({'message': f'Você voltou a seguir {ong[1]}', 'seguindo': True}), 200
+
+        # Criar novo follow
+        cur.execute("""
+            INSERT INTO SEGUINDO (ID_USUARIOS_DOADOR, ID_USUARIOS_ONG, STATUS)
+            VALUES (?, ?, 1)
+        """, (id_doador, id_ong))
+        con.commit()
+
+        return jsonify({'message': f'Você agora está seguindo {ong[1]}', 'seguindo': True}), 200
+
+    except Exception as e:
+        con.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        con.close()
+
+
+@app.route('/desseguir/<int:id_ong>', methods=['POST'])
+def desseguir_ong(id_ong):
+    """Doador deixa de seguir uma ONG"""
+    con = conexao()
+    cur = con.cursor()
+
+    try:
+        # Verifica token
+        token_data = decodificar_token()
+        if token_data == False:
+            return jsonify({'error': 'Você precisa estar logado'}), 401
+
+        # Verifica se é doador
+        if token_data['tipo'] != 1:
+            return jsonify({'error': 'Apenas doadores podem desseguir ONGs'}), 403
+
+        id_doador = token_data['id_usuarios']
+
+        # Verifica se está seguindo
+        cur.execute("""
+            SELECT ID_SEGUINDO FROM SEGUINDO 
+            WHERE ID_USUARIOS_DOADOR = ? AND ID_USUARIOS_ONG = ? AND STATUS = 1
+        """, (id_doador, id_ong))
+        seguindo = cur.fetchone()
+
+        if not seguindo:
+            return jsonify({'error': 'Você não está seguindo esta ONG'}), 404
+
+        # Atualiza status para 0 (não segue mais)
+        cur.execute("""
+            UPDATE SEGUINDO SET STATUS = 0 
+            WHERE ID_USUARIOS_DOADOR = ? AND ID_USUARIOS_ONG = ?
+        """, (id_doador, id_ong))
+        con.commit()
+
+        return jsonify({'message': 'Você deixou de seguir esta ONG', 'seguindo': False}), 200
+
+    except Exception as e:
+        con.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        con.close()
+
+
+@app.route('/verificar_seguindo/<int:id_ong>', methods=['GET'])
+def verificar_seguindo(id_ong):
+    """Verifica se o doador está seguindo a ONG"""
+    con = conexao()
+    cur = con.cursor()
+
+    try:
+        token_data = decodificar_token()
+        if token_data == False:
+            return jsonify({'seguindo': False, 'logado': False}), 200
+
+        # Apenas doadores podem verificar
+        if token_data['tipo'] != 1:
+            return jsonify({'seguindo': False, 'logado': True, 'is_doador': False}), 200
+
+        id_doador = token_data['id_usuarios']
+
+        cur.execute("""
+            SELECT STATUS FROM SEGUINDO 
+            WHERE ID_USUARIOS_DOADOR = ? AND ID_USUARIOS_ONG = ? AND STATUS = 1
+        """, (id_doador, id_ong))
+        seguindo = cur.fetchone()
+
+        return jsonify({
+            'seguindo': bool(seguindo),
+            'logado': True,
+            'is_doador': True
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        con.close()
+
+
+@app.route('/minhas_ongs_seguidas', methods=['GET'])
+def minhas_ongs_seguidas():
+    """Lista todas as ONGs que o doador está seguindo"""
+    con = conexao()
+    cur = con.cursor()
+
+    try:
+        token_data = decodificar_token()
+        if token_data == False:
+            return jsonify({'error': 'Você precisa estar logado'}), 401
+
+        if token_data['tipo'] != 1:
+            return jsonify({'error': 'Apenas doadores podem acessar'}), 403
+
+        id_doador = token_data['id_usuarios']
+
+        cur.execute("""
+            SELECT u.ID_USUARIOS, u.NOME, u.DESCRICAO_BREVE, u.CATEGORIA, u.LOCALIZACAO
+            FROM SEGUINDO s
+            INNER JOIN USUARIOS u ON s.ID_USUARIOS_ONG = u.ID_USUARIOS
+            WHERE s.ID_USUARIOS_DOADOR = ? AND s.STATUS = 1 AND u.ATIVO = 1
+            ORDER BY s.ID_SEGUINDO DESC
+        """, (id_doador,))
+
+        ongs = cur.fetchall()
+
+        lista_ongs = []
+        for ong in ongs:
+            lista_ongs.append({
+                'id': ong[0],
+                'nome': ong[1],
+                'descricao_breve': str(ong[2]) if ong[2] else '',
+                'categoria': str(ong[3]) if ong[3] else '',
+                'localizacao': str(ong[4]) if ong[4] else '',
+                'foto': f'{ong[0]}.jpeg'
+            })
+
+        return jsonify({'ongs': lista_ongs, 'total': len(lista_ongs)}), 200
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
